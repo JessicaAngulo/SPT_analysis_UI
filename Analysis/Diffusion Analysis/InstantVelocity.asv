@@ -1,0 +1,84 @@
+function [velocity_i] = InstantVelocity(app,v,pixel_size)
+%INSTANTVELOCITY calculates the frame to frame velocity in each track of
+%video v. The velocity is defined as the euclidean distance [um] divided by time
+%[s]. 
+%   25.03.2022 Jessica Angulo Capel
+dt = app.save_session.(v).f_rate;
+v_x = ((app.Loaded_files.video_file{1,4}).*pixel_size)-0.5;
+v_y = ((app.Loaded_files.video_file{1,5}).*pixel_size)-0.5;
+
+%% Consider non-imaged frames in 2-color acquisitions
+% We add 1 extra columns of NaN every "ch2_rate" frames, to calculate the right D
+if app.save_session.(v).Time_lapse == 1
+    ch2_rate = app.save_session.(v).Frequency;
+    non_im = app.save_session.(v).Non_imaged_frame;
+    [h,w] = size(app.Loaded_files.video_file{1,4});
+    extra_col = NaN(h,non_im);
+    list = 1:ch2_rate:w;
+    for i = 2:(length(list))
+        c = list(1,i);
+        v_x = [v_x(:,1:(c-1)),extra_col,v_x(:,c:end)];
+        v_y = [v_y(:,1:(c-1)),extra_col,v_y(:,c:end)];
+    end
+end
+%% Apply track filtering
+%v_x(app.save_session.(v).FilteredTracks.Filter == 0,:) = 0;
+%v_y(app.save_session.(v).FilteredTracks.Filter == 0,:) = 0;
+
+%% Calculate velocities
+[h,w] = size(v_x);
+velocity_i = nan(h,w);
+for j = 1:h %for each track
+    if v_x(j,1) ~= 0 %if is not a filtered track
+        x = (v_x(j,:));
+        %x = x(1,~isnan(x));
+        y = (v_y(j,:));
+        %y = y(1,~isnan(y));
+        for k = 1:(length(x)-1)
+            velocity = sqrt((x(1,k+1) - x(1,k)).^2 + (y(1,k+1) - y(1,k)).^2)/dt;
+            if velocity == 0
+                keyboard
+            end
+            velocity_i(j,k) = velocity;
+        end
+    end
+end
+%% Plot on mask
+%Scatter
+% x = app.save_session.(v).video_file{1,4}(:,1:165);
+% y = app.save_session.(v).video_file{1,5}(:,1:165);
+% vel = velocity_i(:,1:165);
+% I = app.save_session.(v).Channel2(:,:,1);
+% [n_x,n_y] = size(I);
+% ax = axes;
+% image([1,n_y],[1,n_x],I,'Parent',ax)
+% colormap(ax,gray)
+% ax.DataAspectRatio = [1,1,1];
+% set(ax,'visible','off');
+% ax2 = axes;
+% scatter(x(:),y(:),[],vel(:),'.','Parent',ax2);
+% ax2.YDir = 'reverse';
+% ax2.DataAspectRatio = [1,1,1];
+% set(ax2,'visible','off');
+% linkaxes([ax2,ax]);
+% colormap(ax2,flipud(autumn))
+% cb2 = colorbar(ax2,'Position',[.88 .11 .0675 .815]);
+
+% % Tracks
+% ax = axes;
+% image([1,n_y],[1,n_x],I,'Parent',ax)
+% colormap(ax,gray)
+% ax.DataAspectRatio = [1,1,1];
+% set(ax,'visible','off');
+% ax2 = axes;
+% hold(ax2,'on')
+% for i = 1:h
+%     plot(x(i,1:165),y(i,1:165),'Parent',ax2)
+% end
+% ax2.YDir = 'reverse';
+% ax2.DataAspectRatio = [1,1,1];
+% set(ax2,'visible','off');
+% linkaxes([ax2,ax]);
+% colormap(ax2,flipud(autumn))
+% colorbar
+end

@@ -1,0 +1,53 @@
+function [dxi_i,dnn_i] = Jump(app,v,pixel_size,w)
+%JUMP Calculates the jumping length (frame-wise displacement) and the
+%distance to the nearest neighbour of each localization. 
+%   app is the GUI data
+%   v is the video name that we are analyzing
+%   pixel_size is the pixel size in [um]
+%   w is the width of the parameters matrices dxi and dnn (maximum number
+%   of frames from all videos)
+%   dxi is the frame-wise displacement of each trajectory (jumping length)
+%   dnn is the distance to the nearest neighbour of each localization to
+%   all localizations in the next frame. 
+% Jessica Angulo Capel 13.11.2023
+v_x = (app.Loaded_files.video_file{1,4}).*pixel_size;
+v_y = (app.Loaded_files.video_file{1,5}).*pixel_size;
+%% Consider non-imaged frames in 2-color acquisitions
+% We add extra columns of NaN, to calculate the right D
+if app.save_session.(v).Time_lapse == 1
+    [~,f] = size(v_y);
+    ch2_rate = app.save_session.(v).Frequency;
+    non_im = app.save_session.(v).Non_imaged_frame;
+    extra_col = NaN(h,non_im);
+    list = 1:ch2_rate:f;
+    for i = 2:(length(list))
+        c = list(1,i);
+        v_x = [v_x(:,1:(c-1)),extra_col,v_x(:,c:end)];
+        v_y = [v_y(:,1:(c-1)),extra_col,v_y(:,c:end)];
+    end
+end
+%% Apply track filtering
+v_x(app.save_session.(v).FilteredTracks.Filter == 0,:) = 0;
+v_y(app.save_session.(v).FilteredTracks.Filter == 0,:) = 0;
+%% Calculate parameters
+[h,~] = size(v_y);
+dxi_i = nan(h,w);
+dnn_i = NaN(h,w);
+for j = 1:width(v_y)-1 %for each frame
+    query = [v_x(:,j),v_y(:,j)];
+    log_frame = find(~isnan(query(:,1)) & (query(:,1) ~= 0));
+    for k = 1:length(log_frame) %for each localization (that is not a NaN or a 0)
+        l = log_frame(k,1); %traj index
+        % Jumping length
+        dxi_i(l,j) = sqrt((v_x(l,j+1) - v_x(l,j)).^2 + (v_y(l,j+1) - v_y(l,j)).^2); %euclidean distance between steps
+        % Distance to nearest neighbour
+        loc_k = query(l,:);
+        if ~isnan(loc_k)
+            query_k = query;
+            query_k(l,:) = []; %localizations in the same frame, removing itself
+            [~,D] = knnsearch(query_k,loc_k);
+            dnn_i(l,j) = D;
+        end
+    end
+end
+end

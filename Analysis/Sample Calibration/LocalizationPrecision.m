@@ -1,0 +1,59 @@
+function [sd_results,sigma_x,sigma_y,FWHM_x,FWHM_y] = LocalizationPrecision(app,v,pixel_size)
+%LOCALIZATIONPRECISION calculates the distance from each point to the mean
+%position. It is performed for all localizations of all tracks. 
+%   10.06.2021 Roger Pons
+v_x = (app.Loaded_files.video_file{1,4}).*pixel_size;
+v_x(app.save_session.(v).FilteredTracks.Filter == 0,:) = [];
+v_y = (app.Loaded_files.video_file{1,5}).*pixel_size;
+v_y(app.save_session.(v).FilteredTracks.Filter == 0,:) = [];
+x = v_x';
+y = v_y';
+[~,w] = size(x);
+sd_results = [];
+if app.preview_bar.CancelRequested
+    close(app.fig);
+    return
+end
+parfor j = 1:w
+    x_t = v_x(j,:)';
+    x_t(isnan(x_t)) = [];
+    N = length(x_t);
+    y_t = v_y(j,:)';
+    y_t(isnan(y_t)) = [];
+    cx = mean(x_t); %variable x of the point "c"
+    cy = mean(y_t); %variable y of the point "c"
+    for i=1:N
+        dif_x = x_t(i,1)-cx;
+        dif_y = y_t(i,1)-cy;
+        dif_i = [dif_x,dif_y];
+        sd_results = [sd_results;dif_i];
+    end
+end
+[N,c] = hist3(sd_results,'Nbins',[100 100]);
+[h,w]=size(N);
+data=zeros(h*w,3);
+for j=1:h
+    for i=1:w
+        data(100*(j-1)+i,1) = c{1,1}(j);
+        data(100*(j-1)+i,2) = c{1,2}(i);
+        data(100*(j-1)+i,3) = N(j,i);
+    end
+end
+ftG = fittype('a*exp(-( ((x-b)/c)^2 + ((y-d)/e)^2 ) )','dependent',{'z'},'independent',{'x','y'}); %Defining Gaussian fitting function
+x = data(:,1);
+y = data(:,2);
+z = data(:,3);
+opts = fitoptions( ftG );
+opts.StartPoint = [max(max(N)), 0.0001, 0.01, 0.0001, 0.01]; %Starting Gaussian parameter values
+fitG = fit([x, y], z, ftG, opts);
+a = fitG.a;
+b = fitG.b;
+c = fitG.c;
+d = fitG.d;
+e = fitG.e;
+sigma_x = c/sqrt(2)*10^3;
+sigma_y = e/sqrt(2)*10^3;
+FWHM_x = 2*sigma_x*sqrt(2*log(2)); %nm Gaussian normal
+FWHM_y = 2*sigma_y*sqrt(2*log(2)); %nm Gaussian normal
+clear fit
+end
